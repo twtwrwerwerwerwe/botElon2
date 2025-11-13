@@ -13,13 +13,11 @@ from aiogram.enums import ParseMode
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
-
-
 logging.basicConfig(level=logging.INFO)
 
 # ================== SOZLAMALAR ==================
-TOKEN = "8285781260:AAE3Oq6ZyCrPHeaSvMJjZiV7Q3xChHEMlVc"
-ADMIN_ID = 6302873072  # admin Telegram ID
+TOKEN = "8285781260:AAE3Oq6ZyCrPHeaSvMJjZiV7Q3xChHEMlVc"           # Masalan: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+ADMIN_ID = 6302873072                  # Sizning Telegram ID (admin)
 GROUP_IDS = [-5094653291, -5094653291, -5078793194, -1002589715287]  # Guruhlar ID'lari
 # =================================================
 
@@ -31,25 +29,33 @@ bot = Bot(
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-approved_users = set()
-sending_tasks = {}
+approved_users = set()      # Ruxsat berilgan foydalanuvchilar
+sending_tasks = {}          # Foydalanuvchilarning yuborish tasklari
 
 # ================== KLAVIATURALAR ==================
 def main_menu():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("📢 E’lon yuborish"))
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📢 E’lon yuborish")]],
+        resize_keyboard=True
+    )
     return kb
 
 def back_button():
-    return ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("◀️ Orqaga"))
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="◀️ Orqaga")]],
+        resize_keyboard=True
+    )
+    return kb
 
 def interval_buttons():
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="5 daqiqa", callback_data="interval_5")],
-        [InlineKeyboardButton(text="7 daqiqa", callback_data="interval_7")],
-        [InlineKeyboardButton(text="10 daqiqa", callback_data="interval_10")],
-        [InlineKeyboardButton(text="15 daqiqa", callback_data="interval_15")]
-    ])
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="5 daqiqa", callback_data="interval_5")],
+            [InlineKeyboardButton(text="7 daqiqa", callback_data="interval_7")],
+            [InlineKeyboardButton(text="10 daqiqa", callback_data="interval_10")],
+            [InlineKeyboardButton(text="15 daqiqa", callback_data="interval_15")],
+        ]
+    )
     return kb
 
 # ================== START ==================
@@ -59,13 +65,12 @@ async def start_cmd(message: Message):
     if user_id in approved_users:
         await message.answer("👋 Xush kelibsiz! Quyidagi menyudan foydalaning:", reply_markup=main_menu())
     else:
-        markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📨 So‘rovnoma yuborish", callback_data=f"request_access_{user_id}")]
-        ])
-        await message.answer(
-            "🛑 Botni ishlatish uchun adminga so‘rovnoma yuboring.",
-            reply_markup=markup
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📨 So‘rovnoma yuborish", callback_data=f"request_access_{user_id}")]
+            ]
         )
+        await message.answer("🛑 Botni ishlatish uchun adminga so‘rovnoma yuboring.", reply_markup=markup)
 
 # ================== ADMIN SO‘ROV ==================
 @dp.callback_query(F.data.startswith("request_access_"))
@@ -73,13 +78,14 @@ async def request_access(call: CallbackQuery):
     user_id = int(call.data.split("_")[-1])
     user = call.from_user
     text = f"👤 <b>{user.full_name}</b> (ID: <code>{user_id}</code>) botga qo‘shilmoqchi."
-
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Ruxsat berish", callback_data=f"approve_{user_id}"),
-            InlineKeyboardButton(text="❌ Rad etish", callback_data=f"deny_{user_id}")
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Ruxsat berish", callback_data=f"approve_{user_id}"),
+                InlineKeyboardButton(text="❌ Rad etish", callback_data=f"deny_{user_id}")
+            ]
         ]
-    ])
+    )
     await bot.send_message(ADMIN_ID, text, reply_markup=markup)
     await call.message.edit_text("📨 So‘rovnoma adminga yuborildi. Javobni kuting.")
 
@@ -111,13 +117,13 @@ async def go_back(message: Message):
     await storage.set_state(message.from_user.id, None)
     await message.answer("🏠 Asosiy menyu:", reply_markup=main_menu())
 
-@dp.message(F.text, lambda msg, state=None: storage.get_state(msg.from_user.id) == "elon_text")
+@dp.message(F.text, lambda msg, state=None: asyncio.run(storage.get_state(msg.from_user.id)) == "elon_text")
 async def get_text(message: Message):
     await storage.update_data(message.from_user.id, {"text": message.text})
     await storage.set_state(message.from_user.id, "elon_photo")
     await message.answer("🖼 Rasm yuboring (majburiy):")
 
-@dp.message(F.photo, lambda msg, state=None: storage.get_state(msg.from_user.id) == "elon_photo")
+@dp.message(F.photo, lambda msg, state=None: asyncio.run(storage.get_state(msg.from_user.id)) == "elon_photo")
 async def get_photo(message: Message):
     photo_id = message.photo[-1].file_id
     user_data = await storage.get_data(message.from_user.id)
@@ -133,13 +139,15 @@ async def choose_interval(call: CallbackQuery):
     interval = int(call.data.split("_")[-1])
     user_id = call.from_user.id
     user_data = await storage.get_data(user_id)
-
     text = user_data["text"]
     photo = user_data["photo"]
 
     await call.message.edit_text(f"✅ Xabar yuborish boshlandi ({interval} daqiqa oraliqda).")
 
-    stop_markup = ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("🛑 To‘xtatish"))
+    stop_markup = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="🛑 To‘xtatish")]],
+        resize_keyboard=True
+    )
     await bot.send_message(user_id, "📨 E’lon yuborish boshlandi.", reply_markup=stop_markup)
 
     task = asyncio.create_task(send_periodically(user_id, text, photo, interval))
