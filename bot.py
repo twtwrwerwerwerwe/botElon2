@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 # ================== SOZLAMALAR ==================
 TOKEN = "8285781260:AAE3Oq6ZyCrPHeaSvMJjZiV7Q3xChHEMlVc"           # Masalan: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
 ADMIN_ID = 6302873072                  # Sizning Telegram ID (admin)
-GROUP_IDS = [-5094653291, -5094653291, -5078793194, -1002589715287]  # Guruhlar ID'lari
+GROUP_IDS = [-3092807710]  # Guruhlar ID'lari
 # =================================================
 
 # Bot va Dispatcher
