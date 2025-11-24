@@ -35,6 +35,7 @@ SESSION_NAME = "session"
 # ================= TELETHON CLIENT =================
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
+
 # Kanallar (join yo‘q — faqat send_file)
 TARGETS = [
     "https://t.me/BUVAYDA_YANGIQORGON_Toshkentt",
@@ -141,6 +142,10 @@ TARGETS = [
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
+# Telethon optimized (no updates thread)
+# Telethon client — parametrlar olib tashlandi (eng keng mos keluvchi)
+client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+
 approved_users = {ADMIN_ID}       # ADMIN doim ruxsatli
 sending_tasks = {}
 
@@ -167,20 +172,17 @@ def interval_buttons():
         ]
     )
 
-def skip_photo_button():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🚫 Rasmni o'tkazib yuborish", callback_data="skip_photo")]]
-    )
-
 # ================= START =================
 @dp.message(CommandStart())
 async def start_cmd(message: Message):
     uid = message.from_user.id
 
+    # ADMIN hech qachon so‘rovga tushmaydi
     if uid == ADMIN_ID:
         approved_users.add(uid)
         return await message.answer("👑 Admin paneliga xush kelibsiz!", reply_markup=main_menu())
 
+    # oddiy user → ruxsat so‘rashi kerak
     if uid in approved_users:
         return await message.answer("👋 Xush kelibsiz!", reply_markup=main_menu())
 
@@ -198,6 +200,7 @@ async def request_access(call: CallbackQuery):
     user_id = int(call.data.split("_")[1])
     u = call.from_user
 
+    # ADMIN ga so‘rov boradi
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -250,7 +253,7 @@ async def get_text(message: Message):
         return
     await dp.storage.update_data(uid, {"text": message.text})
     await dp.storage.set_state(uid, "elon_photo")
-    await message.answer("🖼 Rasm yuboring:", reply_markup=skip_photo_button())
+    await message.answer("🖼 Rasm yuboring:")
 
 @dp.message(F.photo)
 async def get_photo(message: Message):
@@ -266,16 +269,6 @@ async def get_photo(message: Message):
     await dp.storage.set_state(uid, "interval")
     await message.answer("⏱ Intervalni tanlang:", reply_markup=interval_buttons())
 
-# ================= SKIP PHOTO =================
-@dp.callback_query(F.data == "skip_photo")
-async def skip_photo(call: CallbackQuery):
-    uid = call.from_user.id
-    data = await dp.storage.get_data(uid)
-    data["photo"] = None
-    await dp.storage.update_data(uid, data)
-    await dp.storage.set_state(uid, "interval")
-    await call.message.edit_text("⏱ Intervalni tanlang:", reply_markup=interval_buttons())
-
 # ================= INTERVAL =================
 @dp.callback_query(F.data.startswith("interval_"))
 async def choose_interval(call: CallbackQuery):
@@ -284,7 +277,7 @@ async def choose_interval(call: CallbackQuery):
 
     data = await dp.storage.get_data(uid)
     text = data["text"]
-    photo = data.get("photo")
+    photo = data["photo"]
 
     await call.message.edit_text("📨 Jo‘natish boshlandi!")
 
@@ -297,18 +290,17 @@ async def choose_interval(call: CallbackQuery):
         )
     )
 
+    # Start task
     task = asyncio.create_task(send_loop(uid, text, photo, interval))
     sending_tasks[uid] = task
 
 # ================= SEND LOOP =================
 async def send_loop(uid: int, text: str, photo_file_id: str, interval: int):
     await client.start()
-    local_path = None
 
-    if photo_file_id:
-        os.makedirs("temp_media", exist_ok=True)
-        local_path = f"temp_media/{photo_file_id.replace('/', '_')}.jpg"
-        await bot.download(photo_file_id, local_path)
+    os.makedirs("temp_media", exist_ok=True)
+    local_path = f"temp_media/{photo_file_id.replace('/', '_')}.jpg"
+    await bot.download(photo_file_id, local_path)
 
     end = datetime.now() + timedelta(hours=24)
 
@@ -316,10 +308,7 @@ async def send_loop(uid: int, text: str, photo_file_id: str, interval: int):
         for target in TARGETS:
             try:
                 entity = await client.get_entity(target)
-                if local_path:
-                    await client.send_file(entity, local_path, caption=text)
-                else:
-                    await client.send_message(entity, text)
+                await client.send_file(entity, local_path, caption=text)
                 await bot.send_message(uid, f"✅ Yuborildi: {target}")
                 await asyncio.sleep(random.uniform(1.0, 1.8))
 
@@ -332,7 +321,7 @@ async def send_loop(uid: int, text: str, photo_file_id: str, interval: int):
 
         await asyncio.sleep(interval * 60)
 
-    if local_path and os.path.exists(local_path):
+    if os.path.exists(local_path):
         os.remove(local_path)
 
     await bot.send_message(uid, "⏰ 24 soat tugadi.", reply_markup=main_menu())
