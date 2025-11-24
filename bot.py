@@ -3,7 +3,6 @@ import logging
 import random
 import os
 from datetime import datetime, timedelta
-from typing import Any
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
@@ -27,7 +26,7 @@ API_ID = 32460736
 API_HASH = "285e2a8556652e6f4ffdb83658081031"
 SESSION_NAME = "session"
 
-# Kanallar ro‘yxati (faqat yuboriladi, join YO‘Q)
+# Kanallar (join yo‘q — faqat send_file)
 TARGETS = [
     "https://t.me/BUVAYDA_YANGIQORGON_Toshkentt",
     "https://t.me/taxi_bogdod_toshkent_rishton",
@@ -129,15 +128,21 @@ TARGETS = [
     1948039973
 ]
 
-# Aiogram init
+# ================= INIT =================
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
-# Telethon init
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+# Telethon optimized (no updates thread)
+client = TelegramClient(
+    SESSION_NAME,
+    API_ID,
+    API_HASH,
+    spawn_read_thread=False,
+    update_workers=0
+)
 
+approved_users = {ADMIN_ID}       # ADMIN doim ruxsatli
 sending_tasks = {}
-approved_users = set()
 
 # ================= KEYBOARDS =================
 def main_menu():
@@ -166,18 +171,31 @@ def interval_buttons():
 @dp.message(CommandStart())
 async def start_cmd(message: Message):
     uid = message.from_user.id
+
+    # ADMIN hech qachon so‘rovga tushmaydi
+    if uid == ADMIN_ID:
+        approved_users.add(uid)
+        return await message.answer("👑 Admin paneliga xush kelibsiz!", reply_markup=main_menu())
+
+    # oddiy user → ruxsat so‘rashi kerak
     if uid in approved_users:
         return await message.answer("👋 Xush kelibsiz!", reply_markup=main_menu())
+
     markup = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="📨 So‘rov yuborish", callback_data=f"request_{uid}")]]
+        inline_keyboard=[[InlineKeyboardButton(
+            text="📨 So‘rov yuborish",
+            callback_data=f"request_{uid}"
+        )]]
     )
     await message.answer("🛑 Botdan foydalanish uchun ruxsat kerak.", reply_markup=markup)
 
+# -------- USER REQUEST ----------
 @dp.callback_query(F.data.startswith("request_"))
 async def request_access(call: CallbackQuery):
     user_id = int(call.data.split("_")[1])
     u = call.from_user
 
+    # ADMIN ga so‘rov boradi
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -192,6 +210,7 @@ async def request_access(call: CallbackQuery):
         f"👤 <b>{u.full_name}</b>\nID: <code>{user_id}</code>",
         reply_markup=markup
     )
+
     await call.message.edit_text("📨 So‘rov yuborildi.")
 
 @dp.callback_query(F.data.startswith("approve_"))
@@ -237,6 +256,7 @@ async def get_photo(message: Message):
     state = await dp.storage.get_state(uid)
     if state != "elon_photo":
         return
+
     photo_id = message.photo[-1].file_id
     data = await dp.storage.get_data(uid)
     data["photo"] = photo_id
@@ -255,11 +275,17 @@ async def choose_interval(call: CallbackQuery):
     photo = data["photo"]
 
     await call.message.edit_text("📨 Jo‘natish boshlandi!")
-    await bot.send_message(uid, "🟢 Yuborilmoqda...", reply_markup=ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🛑 To‘xtatish")]],
-        resize_keyboard=True
-    ))
 
+    await bot.send_message(
+        uid,
+        "🟢 Yuborilmoqda...",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🛑 To‘xtatish")]],
+            resize_keyboard=True
+        )
+    )
+
+    # Start task
     task = asyncio.create_task(send_loop(uid, text, photo, interval))
     sending_tasks[uid] = task
 
@@ -279,10 +305,12 @@ async def send_loop(uid: int, text: str, photo_file_id: str, interval: int):
                 entity = await client.get_entity(target)
                 await client.send_file(entity, local_path, caption=text)
                 await bot.send_message(uid, f"✅ Yuborildi: {target}")
-                await asyncio.sleep(random.uniform(1.0, 2.0))
+                await asyncio.sleep(random.uniform(1.0, 1.8))
+
             except FloodWaitError as fw:
                 await bot.send_message(uid, f"⏳ FloodWait {fw.seconds}s → {target}")
                 await asyncio.sleep(fw.seconds + 1)
+
             except Exception as e:
                 await bot.send_message(uid, f"⚠️ Xato: {target}\n{e}")
 
@@ -299,16 +327,18 @@ async def send_loop(uid: int, text: str, photo_file_id: str, interval: int):
 async def stop(message: Message):
     uid = message.from_user.id
     task = sending_tasks.get(uid)
+
     if task:
         task.cancel()
         sending_tasks.pop(uid, None)
         return await message.answer("🛑 To‘xtatildi.", reply_markup=main_menu())
+
     await message.answer("❌ Jarayon yo‘q.")
 
 # ================= MAIN =================
 async def main():
     await client.start()
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 
 if __name__ == "__main__":
     asyncio.run(main())
