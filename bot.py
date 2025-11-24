@@ -18,6 +18,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 
+# ================= LOGGING =================
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("telethon").setLevel(logging.WARNING)
+logging.getLogger("telethon.client.updates").setLevel(logging.WARNING)
+logging.getLogger("aiogram").setLevel(logging.WARNING)
+
 # ================= CONFIG =================
 TOKEN = "8285781260:AAE3Oq6ZyCrPHeaSvMJjZiV7Q3xChHEMlVc"
 ADMIN_ID = 6302873072
@@ -25,6 +31,10 @@ ADMIN_ID = 6302873072
 API_ID = 32460736
 API_HASH = "285e2a8556652e6f4ffdb83658081031"
 SESSION_NAME = "session"
+
+# ================= TELETHON CLIENT =================
+client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+
 
 # Kanallar (join yo‘q — faqat send_file)
 TARGETS = [
@@ -133,13 +143,8 @@ bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
 # Telethon optimized (no updates thread)
-client = TelegramClient(
-    SESSION_NAME,
-    API_ID,
-    API_HASH,
-    spawn_read_thread=False,
-    update_workers=0
-)
+# Telethon client — parametrlar olib tashlandi (eng keng mos keluvchi)
+client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 approved_users = {ADMIN_ID}       # ADMIN doim ruxsatli
 sending_tasks = {}
